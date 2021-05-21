@@ -1,15 +1,14 @@
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import PIL.ImageDraw as ImageDraw
 import PIL.Image as Image
 import pandas as pd
+import matplotlib.image as mpimg
 
 class Crop_Image():
-    def __init__(self, image,  landmarks):
-        self.image = image
-        self.landmarks = landmarks
-        #self.image = cv2.resize(image, (403,658))
+    def __init__(self, image_path,  an_path):
+        self.image_path = image_path
+        self.landmarks = pd.read_csv(an_path, header=None, sep='\t').to_numpy()
         return
 
     def find_vec_only_zeros(self, matrix, n):
@@ -21,22 +20,27 @@ class Crop_Image():
         return zero_ind
 
     def crop_im(self):
-        r, c = self.image.shape
-        #return row indices for rows with zeros exclusively
-        idx_rows = self.find_vec_only_zeros(self.image,c)
-        idx_cols = self.find_vec_only_zeros(self.image.T, r)
-        cropped = np.delete(self.image, idx_rows, axis=0)
-        cropped = np.delete(cropped, idx_cols, axis=1)
-        return cropped
+        #find points of rectangle that surrounds the face in image
+        top = int(np.max(self.landmarks[:,1]))
+        bottom = int(np.min(self.landmarks[:,1]))
+        right = int(np.min(self.landmarks[:,0]))
+        left = int(np.max(self.landmarks[:,0]))
+        return top,bottom, right, left
 
     def draw_cropped_polygon(self):
+        # create annotations graph on image
 
-        im_cropped = self.crop_im()
-        #draw polygon with landmarks outlines
-        img = Image.fromarray(im_cropped)
-        draw = ImageDraw.Draw(img)
-        outlines = landmarks.flatten().tolist()
-        draw.polygon(outlines)
+        plt.scatter(self.landmarks[:, 0], self.landmarks[:, 1], cmap='gray')
+        plt.savefig("landmarks.png", cmap='gray')
+        img = mpimg.imread(self.image_path)
+        imgplot = plt.imshow(img)
+        # save annotations image in file
+        plt.savefig('ex_pic.png')
+        plt.close()
+        landmarks_im_arr = cv2.imread("ex_pic.png", cv2.IMREAD_GRAYSCALE)
+        a, b, c, d = self.crop_im()
+        cropped = landmarks_im_arr[b:a, c:d]
+        img = Image.fromarray(cropped)
         img.save('polygon_ex.png')
         return
 
@@ -48,10 +52,11 @@ if __name__=="__main__":
            r"\pain_no_pain_data_clinical_population\video_data\Annotated_images_sorted_by_condition" \
            r"\before_surgery_no_pain\cat_1_video_4.2.txt"
 
-    image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    landmarks = pd.read_csv(an_path, header=None, sep='\t').to_numpy()
+  #  image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+   # landmarks = pd.read_csv(an_path, header=None, sep='\t').to_numpy()
+
     #find and display outlines in image
-    crop_landmarks = Crop_Image(image, landmarks)
+    crop_landmarks = Crop_Image(img_path, an_path)
     crop_landmarks.draw_cropped_polygon()
 
 
