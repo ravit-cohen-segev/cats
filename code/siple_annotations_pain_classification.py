@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 import os
-import cv2
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split, cross_val_score
 
 class DATA_landmarks():
     def __init__(self, dir_path):
@@ -73,6 +75,28 @@ class DATA_landmarks():
                 normalized_euc = euc_arr / max
         return normalized_euc, labels_df
 
+class Logit():
+    def __init__(self, X_train, y_train, X_test, y_test):
+        self.X_train = X_train
+        self.X_test = X_test
+        self.y_train = y_train
+        self.y_test = y_test
+        return
+
+    def create_logistic_model(self):
+        self.model = LogisticRegression(random_state=42)
+        self.model.fit(self.X_train, self.y_train)
+        return self.model
+
+    def predict_accuracy(self, model):
+        self.create_logistic_model()
+        # cross validation
+        cross_val = cross_val_score(model, self.X_train, self.y_train, cv=5, scoring='f1_macro')
+        train_accuracy = model.score(self.X_train, self.y_train)
+        test_accuracy = model.score(self.X_test, self.y_test)
+        return cross_val, train_accuracy, test_accuracy
+
+
 if __name__=="__main__":
     dir_path = r"C:\Users\ravit\PycharmProject\cats\Laurens_dataset\Videos_From_Lauren" \
                r"\Cat_pain_data_for_AI_collaboration\pain_no_pain_data_clinical_population" \
@@ -82,5 +106,38 @@ if __name__=="__main__":
 
     DATA_build = DATA_landmarks(dir_path)
     landmarks_euc_array, labels = DATA_build.create_array_landmarks(dir_list)
+
+    #save labels as int array
+    y = labels['label'].values.astype('int')
+
+    X_train, X_test, y_train, y_test = train_test_split(landmarks_euc_array, y, test_size = 0.25, random_state = 42)
+
+    #create class instance for logistic
+    logistic = Logit(X_train, y_train, X_test, y_test)
+    logistic_model = logistic.create_logistic_model()
+    cross_val, train_acc_no_pca, test_acc_no_pca = logistic.predict_accuracy(logistic_model)
+
+    predict_train_no_pca = logistic_model.predict(X_train)
+    predict_test_no_pca = logistic_model.predict(X_test)
+
+
+    #create logistic model after performing PCA
+    pca = PCA(n_components=150)
+    new_data = pca.fit_transform(landmarks_euc_array)
+    #split new data
+    X_train_pca, X_test_pca, y_train_pca, y_test_pca = train_test_split(new_data, y, test_size=0.25, random_state=42)
+    #create another instance for logisitc_pca
+    logistic_pca = Logit(X_train_pca, y_train_pca, X_test_pca, y_test_pca)
+    logistic_pca_model = logistic_pca.create_logistic_model()
+
+    cross_val_pca, train_acc_pca, test_acc_pca = logistic_pca.predict_accuracy(logistic_pca_model)
+
+    predict_train_pca = logistic_pca_model.predict(X_train_pca)
+    predict_test_pca = logistic_pca_model.predict(X_test_pca)
+
+
+
+
+
 
 
