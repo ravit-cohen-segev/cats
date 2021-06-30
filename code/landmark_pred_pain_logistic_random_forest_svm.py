@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, FastICA
 import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split, cross_val_score
+
 
 class DATA_landmarks():
     def __init__(self, dir_path):
@@ -110,6 +111,12 @@ if __name__=="__main__":
     DATA_build = DATA_landmarks(dir_path)
     landmarks_euc_array, labels = DATA_build.create_array_landmarks(dir_list, cat_nums=True)
 
+    #save euclidean array matrix to file
+    df_landmarks = pd.DataFrame(landmarks_euc_array)
+    df_labels = pd.DataFrame(labels)
+    df_landmarks.to_csv("landmark_euclidean_arr.csv")
+    df_labels.to_csv("labels.csv")
+
     #save labels as int array
     y = labels['label'].values.astype('int')
 
@@ -134,12 +141,12 @@ if __name__=="__main__":
     ###########################  random forest #########################################################################
     ####################################################################################################################
 
-    forest_model = RandomForestClassifier(n_estimators=150, max_depth=4)
+    forest_model = RandomForestClassifier(n_estimators=150, max_depth=4, min_samples_leaf=2)
     forest_model.fit(X_train, y_train)
     rf_cross_val, rf_train_acc, rf_test_acc = predict_accuracy(forest_model, X_train, y_train, X_test, y_test)
 
-    #forest model train accuracy  is 95%
-    #forest model test accuracy is 75%
+    #forest model train accuracy  is 90%
+    #forest model test accuracy is 76%
 
     ####################################################################################################################
     ######################## svm #######################################################################################
