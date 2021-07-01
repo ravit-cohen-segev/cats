@@ -41,6 +41,7 @@ class DATA_landmarks():
                 euc = self.calc_euclidean(arr[:,i], arr[:,j])
                 li_distance.append(euc)
         return np.array(li_distance)
+        
 
     def create_array_landmarks(self, dir_list, cat_nums=True, feature_num=48):
         #cat_nums is used as id for the clinical
@@ -56,6 +57,9 @@ class DATA_landmarks():
         idx_count = 0
         #if not cat_nums, that is not from the clinical population. Use a counting variable for cat id
         cat_count = 0
+        #creat random noise of gaussian distribution for adding it later to each landmark df
+        #shape is (2,48)
+        gaus =np.random.normal(0,1,size=(2,48))
         for i, dir in enumerate(dir_list):
             full_path = os.path.join(self.path, dir)
         #    all_files = os.listdir(full_path)
@@ -84,11 +88,15 @@ class DATA_landmarks():
                     idx_count += 1
                     #convert to numpy
                     arr_from_df = df_annot.to_numpy()
+                    #add gaussian noise to landmarks
+                    arr_from_df += gaus
+                    
                     euc_vec = self.calc_euc_vec(arr_from_df)
                     euc_arr = np.vstack((euc_arr, euc_vec))
                     #normalize data by max value in each row
                     max = np.max(euc_arr)
                     normalized_euc = euc_arr / max
+          
         return normalized_euc, labels_df
 
 def predict_accuracy(model, X_train, y_train, X_test, y_test):
@@ -97,6 +105,8 @@ def predict_accuracy(model, X_train, y_train, X_test, y_test):
     train_accuracy = model.score(X_train, y_train)
     test_accuracy = model.score(X_test, y_test)
     return cross_val, train_accuracy, test_accuracy
+
+
 
 
 if __name__=="__main__":
