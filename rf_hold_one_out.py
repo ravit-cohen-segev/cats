@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import precision_score
 
 
 class multi_rf_landmarks():
@@ -39,6 +39,13 @@ class multi_rf_landmarks():
                 li_distance.append(euc)
         return np.array(li_distance)
 
+    def normalized_matrix(self, arr):
+        normalized = np.empty((0, arr.shape[1]))
+        for i, row in enumerate(arr):
+            max = np.max(row)
+            normalized = np.vstack((normalized, row / max))
+        return normalized
+
     def create_split(self, i_test):
         columns = ['cat', 'label']
         #create train and test empty dfs
@@ -46,6 +53,7 @@ class multi_rf_landmarks():
         test_labels = pd.DataFrame(columns=columns)
         train_euc_arr = np.empty((0,1128))
         train_labels = pd.DataFrame(columns=columns)
+
 
         idx_train_count = 0
         idx_test_count = 0
@@ -72,54 +80,64 @@ class multi_rf_landmarks():
                     euc_vec = self.calc_euc_vec(arr_from_df)
                     # add row with cat num and pain clasification
                     # add label, if t1 than no pain (0) if t2 than pain (1)
-
+                    max = np.max(euc_vec)
                     if '_'+str(i_test)+'_' in file:
                         test_labels.loc[idx_test_count] = [i_test, i]
                         idx_test_count += 1
 
                         test_euc_arr = np.vstack((test_euc_arr, euc_vec))
-                        # normalize data by max value in each row
-                        max = np.max(test_euc_arr)
-                        normalized_test_euc = test_euc_arr / max
+
+
                     else:
                         train_labels.loc[idx_train_count] = [self.check_cat_name_in_file(file), i]
                         idx_train_count += 1
                         train_euc_arr = np.vstack((train_euc_arr, euc_vec))
-                    # normalize train data by max value in each row
-                    max = np.max(train_euc_arr)
-                    normalized_train_euc = train_euc_arr / max
+                    # normalize test and train data by max value in each row
+
+                    normalized_train_euc = self.normalized_matrix(train_euc_arr)
+                    normalized_test_euc = self.normalized_matrix(test_euc_arr)
         return normalized_train_euc, train_labels, normalized_test_euc, test_labels
 
 
     def run_multiple_rf(self):
-        res = np.empty((0,3))
+        res = pd.DataFrame(columns=["train_acc", "test_acc"])
         #if not cat_nums, that is not from the clinical population. Use a counting variable for cat id
         forest_model = RandomForestClassifier(n_estimators=150, max_depth=4, min_samples_leaf=2)
 
+        count = 0
         #iterate over cats numbers
         for i in range(1,31):
             X_train, y_train, X_test, y_test = self.create_split(i)
+            if len(X_train) == 0 or len(X_test) == 0:
+                print('empty array:', i)
+                continue
             forest_model.fit(X_train, y_train['label'].values.astype('float'))
-            rf_cross_val, rf_train_acc, rf_test_acc = predict_accuracy(forest_model, X_train, y_train['label'].values.astype('float'), X_test, y_test['label'].values.astype('float'))
-            print("cv: {}, train_acc: {}, test_acc: {} for {} cat as test".format(rf_cross_val, rf_train_acc, rf_test_acc, str(i)))
-        return
+            rf_train_acc, rf_test_acc = predict_accuracy(forest_model, X_train, y_train['label'].values.astype('float')
+                                                         , X_test, y_test['label'].values.astype('float'))
+          #  print("train_acc: {}, test_acc: {} for {} cat as test".format(rf_train_acc, rf_test_acc, str(i)))
+            res.loc[count] = [rf_train_acc, rf_test_acc]
+            count += 1
+
+        return res
 
 
 
 def predict_accuracy(model, X_train, y_train, X_test, y_test):
     # cross validation
-    cross_val = cross_val_score(model, X_train, y_train, cv=5, scoring='f1_macro')
     train_accuracy = model.score(X_train, y_train)
     test_accuracy = model.score(X_test, y_test)
-    return cross_val, train_accuracy, test_accuracy
+    return train_accuracy, test_accuracy
 
 if __name__=="__main__":
     dir_path = r"C:\Users\ravit\PycharmProject\cats\Laurens_dataset\Videos_From_Lauren" \
                r"\Cat_pain_data_for_AI_collaboration\pain_no_pain_data_clinical_population" \
                r"\video_data\Annotated_images_sorted_by_condition"
 
+    save_path = r"C:\Users\ravit\PycharmProject\cats\code"
+
     dir_list = ['1_hour_after_surgery_worst_pain', 'before_surgery_no_pain']
     np.random.seed(42)
 
     multi_rf = multi_rf_landmarks(dir_path)
-    multi_rf.run_multiple_rf()
+    res_file = multi_rf.run_multiple_rf()
+    res_file.to_excel("loocv_rf.xlsx", save_path)
