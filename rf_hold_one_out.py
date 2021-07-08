@@ -3,7 +3,12 @@ import numpy as np
 import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import precision_score
-
+from sklearn.metrics import roc_curve, roc_auc_score
+from sklearn.metrics import plot_roc_curve
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import f1_score
+from sklearn.metrics import auc
+import matplotlib.pyplot as plt
 
 class multi_rf_landmarks():
     def __init__(self, dir_path):
@@ -45,6 +50,14 @@ class multi_rf_landmarks():
             max = np.max(row)
             normalized = np.vstack((normalized, row / max))
         return normalized
+    
+
+ #   def plot_roc(self, rfc, x, y):
+  #      ax = plt.gca()
+   #     rfc_disp = plot_roc_curve(rfc, x, y, ax=ax, alpha=0.8)
+    #    plt.show()
+     #   return
+             
 
     def create_split(self, i_test):
         columns = ['cat', 'label']
@@ -80,7 +93,7 @@ class multi_rf_landmarks():
                     euc_vec = self.calc_euc_vec(arr_from_df)
                     # add row with cat num and pain clasification
                     # add label, if t1 than no pain (0) if t2 than pain (1)
-                    max = np.max(euc_vec)
+                 
                     if '_'+str(i_test)+'_' in file:
                         test_labels.loc[idx_test_count] = [i_test, i]
                         idx_test_count += 1
@@ -100,27 +113,53 @@ class multi_rf_landmarks():
 
 
     def run_multiple_rf(self):
-        res = pd.DataFrame(columns=["train_acc", "test_acc"])
+        res = pd.DataFrame(columns=["train_acc", "test_acc", "f1_score", "auc"])
         #if not cat_nums, that is not from the clinical population. Use a counting variable for cat id
-        forest_model = RandomForestClassifier(n_estimators=150, max_depth=4, min_samples_leaf=2)
-
+            
         count = 0
+        
         #iterate over cats numbers
         for i in range(1,31):
+            forest_model = RandomForestClassifier(n_estimators=150, max_depth=4,
+                                                  min_samples_leaf=2)
             X_train, y_train, X_test, y_test = self.create_split(i)
+            #keep only labels in format of array
+            y_train = y_train['label'].values.astype('float')
+            y_test = y_test['label'].values.astype('float')
+            #check if arrays are not empty. To avoid error in classifier training
             if len(X_train) == 0 or len(X_test) == 0:
                 print('empty array:', i)
                 continue
-            forest_model.fit(X_train, y_train['label'].values.astype('float'))
-            rf_train_acc, rf_test_acc = predict_accuracy(forest_model, X_train, y_train['label'].values.astype('float')
-                                                         , X_test, y_test['label'].values.astype('float'))
+            forest_model.fit(X_train, y_train)
+            rf_train_acc, rf_test_acc = predict_accuracy(forest_model, X_train,
+                                                         y_train, X_test, y_test)
+                                
           #  print("train_acc: {}, test_acc: {} for {} cat as test".format(rf_train_acc, rf_test_acc, str(i)))
-            res.loc[count] = [rf_train_acc, rf_test_acc]
+           
+        
             count += 1
-
+            #plot ROC curve for test
+      #      self.plot_roc(forest_model, X_test, y_test['label'].values.astype('float'))
+            
+            y_scores = forest_model.predict(X_test)
+            rf_precision, rf_recall, _ = precision_recall_curve(y_test, y_scores)
+            
+            f1 = f1_score(y_test, y_scores)
+            auc_Score = auc(rf_recall, rf_precision)
+            res.loc[count] = [rf_train_acc, rf_test_acc, f1, auc_Score]
+            
+            #plot precison-recall curves
+         #  no_skill = len(y_test[y_test==1.0]) / len(y_test)
+          #  plt.plot([0, 1], [no_skill, no_skill], linestyle='--', label='No Skill')
+           # plt.plot(rf_recall, rf_precision, marker='.', label='Random Forest')
+            # axis labels
+           # plt.xlabel('Recall')
+           # plt.ylabel('Precision')
+            # show the legend
+           # plt.legend()
+            # show the plot
+            #plt.show()      
         return res
-
-
 
 def predict_accuracy(model, X_train, y_train, X_test, y_test):
     # cross validation
@@ -133,11 +172,11 @@ if __name__=="__main__":
                r"\Cat_pain_data_for_AI_collaboration\pain_no_pain_data_clinical_population" \
                r"\video_data\Annotated_images_sorted_by_condition"
 
-    save_path = r"C:\Users\ravit\PycharmProject\cats\code"
 
     dir_list = ['1_hour_after_surgery_worst_pain', 'before_surgery_no_pain']
     np.random.seed(42)
 
     multi_rf = multi_rf_landmarks(dir_path)
+  #  multi_rf.run_multiple_rf()
     res_file = multi_rf.run_multiple_rf()
-    res_file.to_excel("loocv_rf.xlsx", save_path)
+    res_file.to_excel("loocv_rf.xlsx")
