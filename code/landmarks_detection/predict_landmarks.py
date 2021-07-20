@@ -15,9 +15,9 @@ from tensorflow.keras.callbacks import Callback, History
 import tensorflow.keras.backend as K
 from keras.objectives import mean_squared_error
 from PIL import Image
-import numpy as np
-import pickle, glob, random, os, zipfile
+import pickle, glob, random, zipfile
 from tensorflow.contrib.tpu.python.tpu import keras_support
+from create_dataset_functions import *
 
 def enumerate_layers():
     resnet = ResNet50(include_top=False, weights="imagenet", input_shape=(224, 224, 3))
@@ -43,60 +43,32 @@ class CatGenerator:
             self.annotation_data = pickle.load(fp)
 
     def flow_from_directory(self, batch_size, train=True, shuffle=True, use_data_augmentation=True):
-        source_dir = "cats-dataset/train" if train else "cats-dataset/test"
-        images = glob.glob(source_dir+"/*.jpg")
-        X_cache, y_cache = [], []
-        while True:
-            if shuffle:
-                np.random.shuffle(images)
-            for img_path in images:
-                with Image.open(img_path) as img:
-                    width, height = img.size
-                    img_array = np.asarray(img.resize((224, 224), Image.BILINEAR))
-                basename = os.path.basename(img_path)
-                data = self.annotation_data[basename]
-                #number of landmarks is 48
-                annotation = np.zeros((48,2), dtype=np.float32)
-                annotation[:, 0] = data[2][:, 0] / width
-                annotation[:, 1] = data[2][:, 1] / height
-                annotation = np.clip(annotation, 0.0, 1.0)
+        dir_path_clinical = r"C:\Users\ravit\PycharmProject\cats\Laurens_dataset\Videos_From_Lauren\Cat_pain_data_for_AI_collaboration\pain_no_pain_data_clinical_population\video_data\Annotated_images_sorted_by_condition"
+        dir_path_div_pain = r"C:/Users/ravit/PycharmProject/cats/Laurens_dataset/Videos_From_Lauren/Cat_pain_data_for_AI_collaboration/pain_no_pain_data_diverse_population_/pain"
+        dir_path_div_no_pain = r"C:/Users/ravit/PycharmProject/cats/Laurens_dataset/Videos_From_Lauren/Cat_pain_data_for_AI_collaboration/pain_no_pain_data_diverse_population_/no_pain"
 
-                if train and use_data_augmentation:
-                   
-                    if random.random() >= 0.5:
-                        img_array = img_array[:, ::-1, :]
-                        annotation[:, 0] = 1 - annotation[:, 0]
-                        annotation[0, :], annotation[1, :] = annotation[1, :], annotation[0, :].copy()              
-                        annotation[3:6, :], annotation[6:9, :] = annotation[6:9, :], annotation[3:6, :].copy()
-                    # PCA Color Augmentation
-                    img_array = self.pca_color_augmentation(img_array)
+        # define image shape for reshaping all of the images in the dataset
+        # the image shape is defined by the original code
+        image_shape = (224, 224)
 
-                X_cache.append(img_array)
-                y_cache.append(np.ravel(annotation))
+        create_data = create_dataset_dict(dir_path_clinical, 0, image_shapetrain=True, shuffle=True, use_data_augmentation=True)
+        dataset_dict = create_data.create_dict()
 
-                if len(X_cache) == batch_size:
-                    X_batch = np.asarray(X_cache, dtype=np.float32) / 255.0
-                    y_batch = np.asarray(y_cache, dtype=np.float32)
-                    X_cache, y_cache = [], []
-                    yield X_batch, y_batch
+        create_data_div_pain = create_dataset_dict(dir_path_div_pain, len(dataset_dict), image_shape, train=True, shuffle=True, use_data_augmentation=True)
+        dataset_div_pain = create_data_div_pain.create_dict()
 
-    def pca_color_augmentation(self, image_array_input):
-        assert image_array_input.ndim == 3 and image_array_input.shape[2] == 3
-        assert image_array_input.dtype == np.uint8
+        create_data_div_no_pain = create_dataset_dict(dir_path_div_no_pain, len(dataset_dict) + len(dataset_div_pain), image_shape, train=True, shuffle=True, use_data_augmentation=True)
+        dataset_div_no_pain = create_data_div_no_pain.create_dict()
 
-        img = image_array_input.reshape(-1, 3).astype(np.float32)
-        img = (img - np.mean(img, axis=0)) / np.std(img, axis=0)
-
-        cov = np.cov(img, rowvar=False)
-        lambd_eigen_value, p_eigen_vector = np.linalg.eig(cov)
-
-        rand = np.random.randn(3) * 0.1
-        delta = np.dot(p_eigen_vector, rand*lambd_eigen_value)
-        delta = (delta * 255.0).astype(np.int32)[np.newaxis, np.newaxis, :]
-
-        img_out = np.clip(image_array_input + delta, 0, 255).astype(np.uint8)
-        return img_out
-
+        dataset_dict.update(dataset_div_pain)
+        dataset_dict.update(dataset_div_no_pain)
+        '''
+        if len(X_cache) == batch_size:
+            X_batch = np.asarray(X_cache, dtype=np.float32) / 255.0
+            y_batch = np.asarray(y_cache, dtype=np.float32)
+            X_cache, y_cache = [], []
+            yield X_batch, y_batch'''
+        return dataset_dict
 
 def loss_function_simple(y_true, y_pred):
     return mean_squared_error(y_true, y_pred)
