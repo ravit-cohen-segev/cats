@@ -8,19 +8,21 @@ import numpy as np
 import pandas as pd
 import os 
 import cv2
+import random
 
 class create_dataset_dict():
-    def __init__(self,path, i, image_shape):
+    def __init__(self,path, image_shape):
         self.path = path
-        self.annotated = {}
-        self.i = i
+        self.x_cache, self.y_cache = [], []
         self.dim = image_shape
 
 
         
-    def cats_annotated_in_dir(self, d, train=True, shuffle=True, use_data_augmentation=True):
+    def cats_annotated_in_dir(self, d, train=True, use_data_augmentation=True):
         full_path = os.path.join(self.path,d)
         files = os.listdir(full_path)
+
+
         for file in files:
             #check if file is with '.txt' extension. if not than continue to the next file
             if '.txt' not in file:
@@ -65,9 +67,10 @@ class create_dataset_dict():
                 # PCA Color Augmentation
                 img_array = self.pca_color_augmentation(resized)
 
-            self.annotated[str(self.i)] = [img_array, annotation]
+            self.x_cache.append(img_array)
+            self.y_cache.append(annotation)
             #move to the next index/key
-            self.i += 1
+
         return
 
     def pca_color_augmentation(self, image_array_input):
@@ -93,7 +96,7 @@ class create_dataset_dict():
         dir_list = os.listdir(self.path)
         for d in dir_list:
             self.cats_annotated_in_dir(d)
-        return self.annotated
+        return self.x_cache, self.y_cache
             
           
 if __name__=="__main__":

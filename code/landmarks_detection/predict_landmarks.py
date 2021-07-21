@@ -16,7 +16,6 @@ import tensorflow.keras.backend as K
 from keras.objectives import mean_squared_error
 from PIL import Image
 import pickle, glob, random, zipfile
-from tensorflow.contrib.tpu.python.tpu import keras_support
 from create_dataset_functions import *
 
 def enumerate_layers():
@@ -27,7 +26,7 @@ def enumerate_layers():
 
 def create_resnet():
     resnet = ResNet50(include_top=False, weights="imagenet", input_shape=(224, 224, 3))
-    for i in range(82):
+    for i in range(48):
      
         resnet.layers[i].trainable=False 
 
@@ -39,8 +38,7 @@ def create_resnet():
 
 class CatGenerator:
     def __init__(self):
-        with open("cats-dataset/cat_annotation.dat", "rb") as fp:
-            self.annotation_data = pickle.load(fp)
+        pass
 
     def flow_from_directory(self, batch_size, train=True, shuffle=True, use_data_augmentation=True):
         dir_path_clinical = r"C:\Users\ravit\PycharmProject\cats\Laurens_dataset\Videos_From_Lauren\Cat_pain_data_for_AI_collaboration\pain_no_pain_data_clinical_population\video_data\Annotated_images_sorted_by_condition"
@@ -51,24 +49,27 @@ class CatGenerator:
         # the image shape is defined by the original code
         image_shape = (224, 224)
 
-        create_data = create_dataset_dict(dir_path_clinical, 0, image_shapetrain=True, shuffle=True, use_data_augmentation=True)
-        dataset_dict = create_data.create_dict()
+        create_data = create_dataset_dict(dir_path_clinical, image_shape)
+        x_data, y_data = create_data.create_dict()
 
-        create_data_div_pain = create_dataset_dict(dir_path_div_pain, len(dataset_dict), image_shape, train=True, shuffle=True, use_data_augmentation=True)
-        dataset_div_pain = create_data_div_pain.create_dict()
+        create_data_div_pain = create_dataset_dict(dir_path_div_pain, image_shape)
+        x_data_div_pain, y_data_div_pain = create_data_div_pain.create_dict()
 
-        create_data_div_no_pain = create_dataset_dict(dir_path_div_no_pain, len(dataset_dict) + len(dataset_div_pain), image_shape, train=True, shuffle=True, use_data_augmentation=True)
-        dataset_div_no_pain = create_data_div_no_pain.create_dict()
+        create_data_div_no_pain = create_dataset_dict(dir_path_div_no_pain, image_shape)
+        x_data_div_no_pain, y_data_div_no_pain = create_data_div_no_pain.create_dict()
 
-        dataset_dict.update(dataset_div_pain)
-        dataset_dict.update(dataset_div_no_pain)
+        x_data.extend(x_data_div_pain)
+        x_data.extend(x_data_div_no_pain)
+
+        y_data.extend(y_data_div_pain)
+        y_data.extend(y_data_div_no_pain)
         '''
         if len(X_cache) == batch_size:
             X_batch = np.asarray(X_cache, dtype=np.float32) / 255.0
             y_batch = np.asarray(y_cache, dtype=np.float32)
             X_cache, y_cache = [], []
             yield X_batch, y_batch'''
-        return dataset_dict
+        return x_data, y_data
 
 def loss_function_simple(y_true, y_pred):
     return mean_squared_error(y_true, y_pred)
@@ -154,27 +155,19 @@ class CatsCallback(Callback):
                 print("Weights saved.", self.min_val_loss)
 
                
-def train(batch_size, use_tpu, load_existing_weights):
+def train(batch_size, load_existing_weights):
     model = create_resnet()
     gen = CatGenerator()
 
     if load_existing_weights:
         model.load_weights("weights.hdf5")
 
-    model.compile(tf.train.MomentumOptimizer(1e-3, 0.9), loss=loss_function_multiple_distance_and_area, metrics=[loss_function_simple])
-
-    if use_tpu:
-        tpu_grpc_url = "grpc://"+os.environ["COLAB_TPU_ADDR"]
-        tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu_grpc_url)
-        strategy = keras_support.TPUDistributionStrategy(tpu_cluster_resolver)
-        model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+    model.compile(tf.compat.v1.train.MomentumOptimizer(1e-3, 0.9), loss=loss_function_multiple_distance_and_area, metrics=[loss_function_simple])
 
     cb = CatsCallback(model)
     history = History()
 
-    model.fit_generator(gen.flow_from_directory(batch_size, True), steps_per_epoch=6996//batch_size,
-                        validation_data=gen.flow_from_directory(batch_size, False), validation_steps=2999//batch_size,
-                        callbacks=[cb, history], epochs=200)
+    model.fit_generator(gen.flow_from_directory(batch_size, True), validation_data=gen.flow_from_directory(batch_size, False), callbacks=[cb, history], epochs=200)
 
     with open("history.dat", "wb") as fp:
         pickle.dump(history.history, fp)
@@ -185,6 +178,16 @@ def train(batch_size, use_tpu, load_existing_weights):
 
 
 if __name__ == "__main__":
-    train(512, True, False)
+    # check GPU available
+    print('Version of tensorflow:\n', tf.__version__)
+    print("GPU Available:", tf.config.list_physical_devices('GPU'))
+
+    if tf.test.is_gpu_available():
+        device_name = tf.test.gpu_device_name()
+    else:
+        device_name = '/CPU:0'
+    print(device_name)
+
+    train(173, False)
 
 
